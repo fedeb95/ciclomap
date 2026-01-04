@@ -161,7 +161,6 @@ def plot_gpx_osm(x, y, slope, colors):
     t0 = time.perf_counter()
     fig, ax = plt.subplots(figsize=(10,10))
 
-    # spessore linee
     widths = slope_to_width(slope)
 
     for i in range(len(x)-1):
@@ -186,13 +185,14 @@ def plot_gpx_osm(x, y, slope, colors):
     ax.legend(legend_lines_type, TYPE_COLORS.keys(),
               title="Tipo strada", loc='lower right')
 
-    # legenda pendenza basata sul massimo della traccia
-    max_slope_traccia = np.max(np.abs(slope))
-    slope_values = [0, 0.25, 0.5, 0.75, 1.0]  # frazioni del max
+    # legenda pendenza minima → massima
+    slope_min = np.min(slope)
+    slope_max = np.max(slope)
+    slope_values = np.linspace(slope_min, slope_max, 5)
     lines_slope = [Line2D([0],[0], color='black',
-                          lw=slope_to_width(v*max_slope_traccia, max_slope=max_slope_traccia))
-                   for v in slope_values]
-    labels_slope = [f"{int(v*100)}%" for v in slope_values]
+                          lw=slope_to_width(s, max_slope=slope_max))
+                   for s in slope_values]
+    labels_slope = [f"{s:.1%}" for s in slope_values]
     ax.legend(lines_slope, labels_slope, title="Pendenza", loc='upper right')
 
     log("Map plotted", t0)
