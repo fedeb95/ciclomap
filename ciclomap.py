@@ -1,4 +1,6 @@
 import time
+import os
+import hashlib
 import gpxpy
 import numpy as np
 import matplotlib.pyplot as plt
@@ -6,7 +8,6 @@ import contextily as ctx
 import osmnx as ox
 from pyproj import Transformer
 from scipy.signal import savgol_filter
-from shapely.geometry import Point
 from matplotlib.lines import Line2D
 from scipy.spatial import cKDTree
 
@@ -59,42 +60,61 @@ def compute_slope(dist, ele):
     log("Slope computed & smoothed", t0)
     return smooth
 
-def slope_to_width(slope, min_w=1.5, max_w=8):
-    s = np.clip(np.abs(slope), 0, 0.15)
-    return min_w + (max_w - min_w) * (s / s.max())
+def slope_to_width(slope, min_w=1.5, max_w=8, max_slope=None):
+    """
+    Converte pendenza in spessore linea.
+    slope: array o float
+    max_slope: massimo valore di pendenza (default: massimo della traccia)
+    """
+    if max_slope is None:
+        max_slope = np.max(np.abs(slope)) if np.any(slope) else 0.01
+    s = np.clip(np.abs(slope), 0, max_slope)
+    return min_w + (max_w - min_w) * (s / max_slope)
 
 # -----------------------------
-# Load OSM Graph (bounding box con buffer)
+# OSM Cache helper
 # -----------------------------
-def load_osm_graph(track_latlon, buffer=0.01):
+def bbox_hash(bbox):
+    """Crea un hash della bounding box per il nome file cache"""
+    s = "_".join([f"{b:.6f}" for b in bbox])
+    return hashlib.md5(s.encode('utf-8')).hexdigest()
+
+def load_osm_graph_cached(track_latlon, buffer=0.01, cache_dir="cache_osm"):
     t0 = time.perf_counter()
+    os.makedirs(cache_dir, exist_ok=True)
 
-    # calcola bounding box in lat/lon
     lats = track_latlon[:,0]
     lons = track_latlon[:,1]
     north = lats.max() + buffer
     south = lats.min() - buffer
     east  = lons.max() + buffer
     west  = lons.min() - buffer
-
-    # bounding box come singola tupla (west, south, east, north)
     bbox = (west, south, east, north)
 
-    G = ox.graph_from_bbox(bbox, network_type='all')  # correttamente con tupla
-    log("OSM graph downloaded", t0)
+    filename = os.path.join(cache_dir, f"osm_{bbox_hash(bbox)}.graphml")
+
+    if os.path.exists(filename):
+        log(f"Loading OSM graph from cache: {filename}", t0)
+        G = ox.load_graphml(filename)
+    else:
+        log("Downloading OSM graph…", t0)
+        G = ox.graph_from_bbox(bbox, network_type='all')  # tupla singola
+        ox.save_graphml(G, filename)
+        log(f"OSM graph saved to cache: {filename}", t0)
+
     return G
 
 # -----------------------------
 # Road type → color map
 # -----------------------------
 TYPE_COLORS = {
-    'cycleway':'green',
-    'residential':'gray',
+    'cycleway':'lime',
+    'residential':'cyan',
     'tertiary':'blue',
     'secondary':'orange',
     'primary':'red',
-    'trunk':'darkred',
-    'unclassified':'lightgray',
+    'trunk':'magenta',
+    'unclassified':'yellow',
     'path':'brown'
 }
 
@@ -105,7 +125,7 @@ def edge_color(edge):
     return TYPE_COLORS.get(hw, 'black')
 
 # -----------------------------
-# Build KD-Tree from OSM edges
+# KD-Tree for OSM edges
 # -----------------------------
 def build_osm_kdtree(G):
     t0 = time.perf_counter()
@@ -127,9 +147,6 @@ def build_osm_kdtree(G):
     log("KD-Tree built for OSM edges", t0)
     return tree, edge_colors
 
-# -----------------------------
-# Assign color to GPX points via KD-Tree
-# -----------------------------
 def get_colors_gpx_kdtree(xy, tree, edge_colors):
     t0 = time.perf_counter()
     _, idx = tree.query(xy)
@@ -144,6 +161,7 @@ def plot_gpx_osm(x, y, slope, colors):
     t0 = time.perf_counter()
     fig, ax = plt.subplots(figsize=(10,10))
 
+    # spessore linee
     widths = slope_to_width(slope)
 
     for i in range(len(x)-1):
@@ -163,9 +181,20 @@ def plot_gpx_osm(x, y, slope, colors):
     ax.set_aspect('equal')
     ax.set_axis_off()
 
-    legend_lines = [Line2D([0],[0], color=c, lw=3) for c in TYPE_COLORS.values()]
-    ax.legend(legend_lines, TYPE_COLORS.keys(),
+    # legenda tipi strada
+    legend_lines_type = [Line2D([0],[0], color=c, lw=3) for c in TYPE_COLORS.values()]
+    ax.legend(legend_lines_type, TYPE_COLORS.keys(),
               title="Tipo strada", loc='lower right')
+
+    # legenda pendenza basata sul massimo della traccia
+    max_slope_traccia = np.max(np.abs(slope))
+    slope_values = [0, 0.25, 0.5, 0.75, 1.0]  # frazioni del max
+    lines_slope = [Line2D([0],[0], color='black',
+                          lw=slope_to_width(v*max_slope_traccia, max_slope=max_slope_traccia))
+                   for v in slope_values]
+    labels_slope = [f"{int(v*100)}%" for v in slope_values]
+    ax.legend(lines_slope, labels_slope, title="Pendenza", loc='upper right')
+
     log("Map plotted", t0)
     plt.tight_layout()
     plt.show()
@@ -185,8 +214,8 @@ def main():
     dist = cumulative_distance(proj)
     slope = compute_slope(dist, ele)
 
-    # Scarica la rete OSM solo nell’area della traccia + buffer
-    G = load_osm_graph(pts, buffer=0.01)
+    # OSM con cache
+    G = load_osm_graph_cached(pts, buffer=0.01)
     G_proj = ox.project_graph(G, to_crs="EPSG:3857")
     tree, edge_colors = build_osm_kdtree(G_proj)
 
