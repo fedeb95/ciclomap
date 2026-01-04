@@ -60,7 +60,7 @@ def compute_slope(dist, ele):
     log("Slope computed & smoothed", t0)
     return smooth
 
-def slope_to_width(slope, min_w=1.5, max_w=8, max_slope=None):
+def slope_to_width(slope, min_w=2.5, max_w=9, max_slope=None):
     """
     Converte pendenza in spessore linea.
     slope: array o float
@@ -115,7 +115,7 @@ TYPE_COLORS = {
     'primary':'red',
     'trunk':'magenta',
     'unclassified':'yellow',
-    'path':'brown'
+    'path':'saddlebrown'
 }
 
 def edge_color(edge):
@@ -163,12 +163,12 @@ def plot_gpx_osm(x, y, slope, colors):
 
     widths = slope_to_width(slope)
 
+    # traccia percorso con bordo nero
     for i in range(len(x)-1):
         ax.plot(x[i:i+2], y[i:i+2],
-                linewidth=widths[i],
-                color=colors[i],
-                solid_capstyle='round',
-                alpha=0.9)
+                linewidth=widths[i]+2, color='black', solid_capstyle='round', alpha=0.9)
+        ax.plot(x[i:i+2], y[i:i+2],
+                linewidth=widths[i], color=colors[i], solid_capstyle='round', alpha=0.9)
 
     pad = 200
     ax.set_xlim(x.min()-pad, x.max()+pad)
@@ -180,20 +180,31 @@ def plot_gpx_osm(x, y, slope, colors):
     ax.set_aspect('equal')
     ax.set_axis_off()
 
-    # legenda tipi strada
-    legend_lines_type = [Line2D([0],[0], color=c, lw=3) for c in TYPE_COLORS.values()]
-    ax.legend(legend_lines_type, TYPE_COLORS.keys(),
-              title="Tipo strada", loc='lower right')
+    # --------------------------
+    # Legenda tipi strada (colori)
+    # --------------------------
+    legend_lines_type = [
+        Line2D([0],[0], color=c, lw=3, solid_capstyle='round')
+        for c in TYPE_COLORS.values()
+    ]
+    legend1 = ax.legend(legend_lines_type, TYPE_COLORS.keys(),
+                        title="Tipo strada", loc='lower right')
+    ax.add_artist(legend1)  # necessario per non sovrascrivere l'altra legenda
 
-    # legenda pendenza minima → massima
+    # --------------------------
+    # Legenda pendenza (spessore)
+    # --------------------------
     slope_min = np.min(slope)
     slope_max = np.max(slope)
     slope_values = np.linspace(slope_min, slope_max, 5)
-    lines_slope = [Line2D([0],[0], color='black',
-                          lw=slope_to_width(s, max_slope=slope_max))
-                   for s in slope_values]
+    lines_slope = [
+        Line2D([0],[0], color='black', lw=slope_to_width(s, max_slope=slope_max))
+        for s in slope_values
+    ]
     labels_slope = [f"{s:.1%}" for s in slope_values]
-    ax.legend(lines_slope, labels_slope, title="Pendenza", loc='upper right')
+    legend2 = ax.legend(lines_slope, labels_slope,
+                        title="Pendenza", loc='upper right')
+    ax.add_artist(legend2)
 
     log("Map plotted", t0)
     plt.tight_layout()
