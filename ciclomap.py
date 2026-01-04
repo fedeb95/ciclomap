@@ -108,13 +108,13 @@ def load_osm_graph_cached(track_latlon, buffer=0.01, cache_dir="cache_osm"):
 # Road type → color map
 # -----------------------------
 TYPE_COLORS = {
-    'cycleway':'lime',
-    'residential':'cyan',
-    'tertiary':'blue',
+    'cycleway':'green',
+    'residential':'pink',
+    'tertiary':'yellow',
     'secondary':'orange',
     'primary':'red',
     'trunk':'magenta',
-    'unclassified':'yellow',
+    'unclassified':'lightgrey',
     'path':'saddlebrown'
 }
 
@@ -157,7 +157,7 @@ def get_colors_gpx_kdtree(xy, tree, edge_colors):
 # -----------------------------
 # Plot map
 # -----------------------------
-def plot_gpx_osm(x, y, slope, colors, base_interval=10, label_offset=15):
+def plot_gpx_osm(x, y, slope, colors, base_interval=10, label_offset=30):
     """
     x, y: coordinate del percorso
     slope: array di pendenze
