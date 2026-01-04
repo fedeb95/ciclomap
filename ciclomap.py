@@ -157,18 +157,50 @@ def get_colors_gpx_kdtree(xy, tree, edge_colors):
 # -----------------------------
 # Plot map
 # -----------------------------
-def plot_gpx_osm(x, y, slope, colors):
+def plot_gpx_osm(x, y, slope, colors, base_interval=10, label_offset=15):
+    """
+    x, y: coordinate del percorso
+    slope: array di pendenze
+    colors: array colori per tipo strada
+    base_interval: intervallo base tra label per tratti pianeggianti
+    label_offset: spostamento delle label dal percorso
+    """
     t0 = time.perf_counter()
     fig, ax = plt.subplots(figsize=(10,10))
 
     widths = slope_to_width(slope)
 
-    # traccia percorso con bordo nero
+    # Traccia percorso con bordo nero
     for i in range(len(x)-1):
         ax.plot(x[i:i+2], y[i:i+2],
                 linewidth=widths[i]+2, color='black', solid_capstyle='round', alpha=0.9)
         ax.plot(x[i:i+2], y[i:i+2],
                 linewidth=widths[i], color=colors[i], solid_capstyle='round', alpha=0.9)
+
+    slope_abs = np.abs(slope)
+    slope_max = np.max(slope_abs)
+    slope_mean = np.mean(slope_abs)
+
+    # Aggiungi label pendenza in modo più frequente sui tratti ripidi
+    for i in range(len(x)):
+        # Determina intervallo adattivo: lineare tra base_interval e base_interval/3
+        freq = int(base_interval * (1 - slope_abs[i]/slope_max * 2/3))
+        freq = max(3, freq)  # non troppo piccolo per evitare sovrapposizioni
+
+        if i % freq != 0:
+            continue
+
+        px, py = x[i], y[i]
+        p_slope = slope[i]
+        label = f"{p_slope:.1%}"
+
+        # Spostamento semplice orizzontale e verticale
+        ox = label_offset
+        oy = label_offset if slope[i] >= 0 else -label_offset
+
+        ax.text(px + ox, py + oy, label,
+                color='black', fontsize=10, fontweight='bold',
+                bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=2))
 
     pad = 200
     ax.set_xlim(x.min()-pad, x.max()+pad)
@@ -189,16 +221,16 @@ def plot_gpx_osm(x, y, slope, colors):
     ]
     legend1 = ax.legend(legend_lines_type, TYPE_COLORS.keys(),
                         title="Tipo strada", loc='lower right')
-    ax.add_artist(legend1)  # necessario per non sovrascrivere l'altra legenda
+    ax.add_artist(legend1)
 
     # --------------------------
     # Legenda pendenza (spessore)
     # --------------------------
     slope_min = np.min(slope)
-    slope_max = np.max(slope)
-    slope_values = np.linspace(slope_min, slope_max, 5)
+    slope_max_trace = np.max(slope)
+    slope_values = np.linspace(slope_min, slope_max_trace, 5)
     lines_slope = [
-        Line2D([0],[0], color='black', lw=slope_to_width(s, max_slope=slope_max))
+        Line2D([0],[0], color='black', lw=slope_to_width(s, max_slope=slope_max_trace))
         for s in slope_values
     ]
     labels_slope = [f"{s:.1%}" for s in slope_values]
@@ -206,7 +238,7 @@ def plot_gpx_osm(x, y, slope, colors):
                         title="Pendenza", loc='upper right')
     ax.add_artist(legend2)
 
-    log("Map plotted", t0)
+    log("Map plotted with adaptive slope labels", t0)
     plt.tight_layout()
     plt.show()
 
