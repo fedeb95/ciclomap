@@ -64,25 +64,23 @@ def slope_to_width(slope, min_w=1.5, max_w=8):
     return min_w + (max_w - min_w) * (s / s.max())
 
 # -----------------------------
-# Load OSM Graph (correct pos args)
+# Load OSM Graph (bounding box con buffer)
 # -----------------------------
-def load_osm_graph(track_latlon):
+def load_osm_graph(track_latlon, buffer=0.01):
     t0 = time.perf_counter()
 
-    # calcola il bounding box in lat/lon
+    # calcola bounding box in lat/lon
     lats = track_latlon[:,0]
     lons = track_latlon[:,1]
-    north = lats.max() + 0.01
-    south = lats.min() - 0.01
-    east  = lons.max() + 0.01
-    west  = lons.min() - 0.01
+    north = lats.max() + buffer
+    south = lats.min() - buffer
+    east  = lons.max() + buffer
+    west  = lons.min() - buffer
 
-    # bbox come tupla (west, south, east, north)
+    # bounding box come singola tupla (west, south, east, north)
     bbox = (west, south, east, north)
 
-    # chiamata corretta: bbox come singolo argomento
-    G = ox.graph_from_bbox(bbox, network_type='all')
-
+    G = ox.graph_from_bbox(bbox, network_type='all')  # correttamente con tupla
     log("OSM graph downloaded", t0)
     return G
 
@@ -187,8 +185,8 @@ def main():
     dist = cumulative_distance(proj)
     slope = compute_slope(dist, ele)
 
-    G = load_osm_graph(pts)
-    # project for KD‑Tree
+    # Scarica la rete OSM solo nell’area della traccia + buffer
+    G = load_osm_graph(pts, buffer=0.01)
     G_proj = ox.project_graph(G, to_crs="EPSG:3857")
     tree, edge_colors = build_osm_kdtree(G_proj)
 
